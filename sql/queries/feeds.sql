@@ -17,3 +17,14 @@ SELECT * FROM feeds WHERE url = $1;
 SELECT f.name, f.url, u.name
 FROM feeds f
 LEFT JOIN users u ON f.user_id = u.id;
+
+-- name: MarkFeedFetched :exec
+UPDATE feeds
+SET last_fetched_at = $1, updated_at = $1
+WHERE id = $2;
+
+-- name: GetNextFeedToFetch :one
+SELECT * FROM feeds
+WHERE user_id = $1
+ORDER BY last_fetched_at NULLS FIRST
+LIMIT 1;

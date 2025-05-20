@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/horsedevours/blog-aggregator/internal/config"
 	"github.com/horsedevours/blog-aggregator/internal/database"
@@ -29,11 +31,13 @@ func main() {
 	cmds.register("register", handlerRegister)
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
-	cmds.register("agg", handlerAgg)
-	cmds.register("addfeed", handlerAddfeed)
+	cmds.register("agg", middlewareParseTime(handlerAgg))
+	cmds.register("addfeed", middlewareLoggedIn(handlerAddfeed))
 	cmds.register("feeds", handlerFeeds)
-	cmds.register("follow", handlerFollow)
-	cmds.register("following", handlerFollowing)
+	cmds.register("follow", middlewareLoggedIn(handlerFollow))
+	cmds.register("following", middlewareLoggedIn(handlerFollowing))
+	cmds.register("unfollow", middlewareLoggedIn(handlerUnfollow))
+	cmds.register("browse", middlewareLoggedIn(handlerBrowse))
 
 	if len(os.Args) < 2 {
 		fmt.Println("at least 2 args required")
@@ -50,5 +54,27 @@ func main() {
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		os.Exit(1)
+	}
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, c command) error {
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return err
+		}
+
+		return handler(s, c, user)
+	}
+}
+
+func middlewareParseTime(handler func(s *state, cmd command, timeBetweeReqs time.Duration) error) func(*state, command) error {
+	return func(s *state, c command) error {
+		timeBetweenReqs, err := time.ParseDuration(c.args[0])
+		if err != nil {
+			return err
+		}
+
+		return handler(s, c, timeBetweenReqs)
 	}
 }
